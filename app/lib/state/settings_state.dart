@@ -27,6 +27,7 @@ class AppSettings {
     this.foldCompletedTurns = true,
     this.visualReplies = true,
     this.customProviderIds = const {},
+    this.cacheRemoteData = true,
     this.loaded = false,
   });
 
@@ -76,6 +77,11 @@ class AppSettings {
   /// phone ([ProviderKeyVault]). Known at launch, before the engine runs, so
   /// the first-run gate can tell "has a model to talk to" without it.
   final Set<String> customProviderIds;
+
+  /// Keep a Host's session list, transcript tails and images on this phone so
+  /// the first frame is warm and a follow resumes instead of re-reading
+  /// everything ([RemoteDataCache]). Turning it off deletes what is stored.
+  final bool cacheRemoteData;
   final bool loaded;
 
   bool get hasApiKey => apiKey.trim().isNotEmpty;
@@ -98,6 +104,7 @@ class AppSettings {
     bool? foldCompletedTurns,
     bool? visualReplies,
     Set<String>? customProviderIds,
+    bool? cacheRemoteData,
     bool? loaded,
   }) => AppSettings(
     apiKey: apiKey ?? this.apiKey,
@@ -114,6 +121,7 @@ class AppSettings {
     foldCompletedTurns: foldCompletedTurns ?? this.foldCompletedTurns,
     visualReplies: visualReplies ?? this.visualReplies,
     customProviderIds: customProviderIds ?? this.customProviderIds,
+    cacheRemoteData: cacheRemoteData ?? this.cacheRemoteData,
     loaded: loaded ?? this.loaded,
   );
 }
@@ -139,6 +147,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _chatTextScaleKey = 'chat_text_scale';
   static const _foldTurnsKey = 'fold_completed_turns';
   static const _visualRepliesKey = 'visual_replies';
+  static const _cacheRemoteDataKey = 'cache_remote_data';
   static const _secure = AppSecureStorage();
   late Future<void> _loaded;
 
@@ -152,7 +161,19 @@ class SettingsController extends Notifier<AppSettings> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } on Object {
+      // No preferences backend: a bare ProviderContainer in a test, or a
+      // platform whose plugin is missing. Nothing stored here is authoritative,
+      // so the defaults carry the app; the settings screen still saves once a
+      // backend exists.
+      if (ref.mounted) {
+        state = AppSettings(autoStartLocal: ref.read(performanceDefaultsProvider).autoStartLocal, autoStartLocalExplicit: false, loaded: true);
+      }
+      return;
+    }
     if (!ref.mounted) return;
     await performanceReady(ref);
     if (!ref.mounted) return;
@@ -188,6 +209,7 @@ class SettingsController extends Notifier<AppSettings> {
       foldCompletedTurns: prefs.getBool(_foldTurnsKey) ?? true,
       visualReplies: prefs.getBool(_visualRepliesKey) ?? true,
       customProviderIds: providerIds,
+      cacheRemoteData: prefs.getBool(_cacheRemoteDataKey) ?? true,
       loaded: true,
     );
   }
@@ -313,6 +335,14 @@ class SettingsController extends Notifier<AppSettings> {
     state = state.copyWith(chatSuggestions: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_chatSuggestionsKey, value);
+  }
+
+  Future<void> setCacheRemoteData(bool value) async {
+    await _loaded;
+    if (!ref.mounted) return;
+    state = state.copyWith(cacheRemoteData: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_cacheRemoteDataKey, value);
   }
 
   Future<void> setAutoStartLocal(bool value) async {

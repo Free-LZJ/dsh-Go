@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
+import '../remote/cache/remote_data_cache.dart';
 import 'bots_state.dart';
 import 'hosts_state.dart';
 import 'read_list_cache.dart';
@@ -513,6 +514,14 @@ class DrawerScope {
   final String? workspaceLabel;
 }
 
+/// This phone's own copy of the active host's conversations, for a drawer
+/// opened while that host is away (issue #101). Empty when nothing was kept.
+final cachedSessionRowsProvider = FutureProvider<List<SessionSummary>>((ref) async {
+  final cache = ref.watch(remoteDataCacheProvider);
+  final host = ref.watch(activeHostProvider);
+  return await cache.readSessions(RemoteDataCache.hostKey(host)) ?? const [];
+});
+
 /// Null until the list (and a selected workspace's members) have arrived.
 final drawerScopeProvider = Provider<DrawerScope?>((ref) {
   final sessions = ref.watch(sessionsProvider);
@@ -540,7 +549,21 @@ final drawerScopeProvider = Provider<DrawerScope?>((ref) {
   final workspaceKnown = prefs.selected == null || registryCurrent && registry.ready && workspace != null;
   if (!validSource || pending || !workspaceKnown || cache.origin(all) != null && !prefs.loaded) {
     final cached = cache.get<CachedSessions>(key);
-    if (cached == null) return null;
+    if (cached == null) {
+      // Nothing from this run. With the host away the phone's own copy of the
+      // host-wide list is still readable (issue #101): one flat list, no
+      // folders, no DS Bot split, no workspace scope — those need the host's
+      // registry. A selected workspace therefore shows nothing rather than
+      // rows it cannot prove belong to it.
+      final rows = connection == null && prefs.selected == null ? ref.watch(cachedSessionRowsProvider).value : null;
+      if (rows == null) return null;
+      final kept = [
+        for (final row in rows)
+          if (!row.blank && !row.isSubagent) row,
+      ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      if (kept.isEmpty) return null;
+      return DrawerScope(sessions: kept, bots: const [], scoped: false, readOnly: true, status: ReadListStatus.offline);
+    }
     // Once a registry is known, deletion or a changed path/membership version
     // invalidates the old projection. Offline, only the exact last confirmed
     // selected workspace may be shown; never fall back to all sessions.

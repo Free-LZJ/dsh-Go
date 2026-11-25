@@ -12,6 +12,7 @@ import '../../state/account_api.dart' show AccountProfile;
 import '../../state/app_info.dart';
 import '../../state/connection_state.dart';
 import '../../state/hosts_state.dart';
+import '../../state/settings_state.dart';
 import '../account/account_widgets.dart' show AccountAvatar;
 import '../common/app_dialog.dart';
 import '../common/ask_ai.dart';
@@ -172,6 +173,18 @@ class _RemoteScreenState extends ConsumerState<RemoteScreen> {
               spot: Spots.addSshHost,
               subtitle: ssh.isEmpty ? l10n.remoteSshDirect : null,
               onTap: () => unawaited(_addSsh()),
+            ),
+          ],
+        ),
+        SettingsSection(
+          title: l10n.remoteDataSection,
+          children: [
+            SettingsSwitchTile(
+              key: const ValueKey('remote-cache-data'),
+              spot: Spots.remoteCacheData,
+              subtitle: l10n.remoteCacheDataHint,
+              value: ref.watch(settingsProvider.select((settings) => settings.cacheRemoteData)),
+              onChanged: (value) => unawaited(ref.read(settingsProvider.notifier).setCacheRemoteData(value)),
             ),
           ],
         ),

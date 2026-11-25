@@ -133,6 +133,13 @@ Connections automatically try LAN / P2P, then TURN, and finally Relay without a 
 
 **Compact history** is off by default. Supporting DSH Remote Hosts summarize historical tool arguments and output to reduce history transfer; message text, live replies, approvals and original Host records stay unchanged. Switch to another host (or this phone) and back, or restart the app, to apply. The current client and its automatic reconnects retain their original mode to avoid mixing cached history. After turning it off, select the host again and reopen the chat to load full history. Older Hosts continue sending full history; SSH is unaffected.
 
+<!-- nav: commonSettings,commonRemoteHost,remoteCacheData -->
+`Settings › Remote host › Store remote data locally`
+
+**Store remote data locally** is on by default. It keeps this Host's chat list, recent messages and images on the phone: reopening the app or coming back to this Host first shows what was stored, then syncs only the new part, and images load from the local copy first. Turning it off deletes the stored copy, and every open then fetches everything from the Host; Host records stay authoritative, and deleting or clearing a chat still follows the Host's answer.
+
+While the Host is away, the stored chat list and recent messages stay readable without a connection and are marked “Offline · previous results”; sending, approving and switching hosts wait until it is back.
+
 DSH Remote connects to one host at a time; switching disconnects the previous one. Over DSH Remote: you can send images only, plugins can only be turned on or off, and DS Bot and chat log export aren't available. Conversation backups use a separate session-transfer capability, not chat log export.
 
 ## Conversation backups and restore

@@ -1270,7 +1270,11 @@ final class SessionSnapshotEvent extends DshEvent {
   /// Local follow ownership; absent for snapshots decoded outside a watch.
   final SessionFollowEpoch? followEpoch;
 
-  SessionSnapshotEvent withEvents(List<SessionLogEvent> events, {SessionFollowEpoch? followEpoch}) =>
+  SessionSnapshotEvent withEvents(
+    List<SessionLogEvent> events, {
+    SessionFollowEpoch? followEpoch,
+    bool? isResync,
+  }) =>
       SessionSnapshotEvent(
         sessionId: sessionId,
         header: header,
@@ -1280,7 +1284,7 @@ final class SessionSnapshotEvent extends DshEvent {
         projections: projections,
         assistantRevision: assistantRevision,
         activeAttempt: activeAttempt,
-        isResync: isResync,
+        isResync: isResync ?? this.isResync,
         followEpoch: followEpoch ?? this.followEpoch,
       );
 }

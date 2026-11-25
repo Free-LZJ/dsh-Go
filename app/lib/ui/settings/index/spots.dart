@@ -1197,6 +1197,13 @@ abstract final class Spots {
     keywords: (l) => l.searchKwRemoteCompactHistory,
   );
 
+  static final remoteCacheData = SettingSpot(
+    'remote-cache-data',
+    page: SettingsPageId.remote,
+    title: (l) => l.remoteCacheData,
+    keywords: (l) => l.searchKwRemoteCacheData,
+  );
+
   // 引擎参数 and its pages (drawn from the engine's schema).
   static final subagentDepth = SettingSpot(
     'subagent-depth',
@@ -1327,6 +1334,7 @@ final _rows = <SettingSpot>[
   Spots.remoteAutoConnect,
   Spots.remoteCompactHistory,
   Spots.remoteSessionBackup,
+  Spots.remoteCacheData,
   Spots.subagentDepth,
   Spots.parallelCalls,
   Spots.commandTimeout,

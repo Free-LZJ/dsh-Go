@@ -1071,8 +1071,13 @@
   "remoteNetworkLocalIpVersion": "手机 ICE IP 版本",
   "remoteNetworkRemoteIpVersion": "主机 ICE IP 版本",
   "remoteNetworkIceProtocol": "ICE 协议",
+  "remoteTransferSettings": "远程传输",
+  "remoteDataSection": "本地数据",
   "remoteCompactHistory": "精简历史",
   "remoteErrHistoryModeChanged": "主机已不支持精简历史，请切换到其他主机后再连回来，或重启 App，重新加载历史",
   "remoteCompactHistoryHint": "支持的 DSH Remote 主机会精简历史工具详情，实时回复和审批不变。切换主机或重启 App 后生效；旧主机仍传输完整历史。",
-  "searchKwRemoteCompactHistory": "精简 简洁 历史 工具 传输 流量 远程 compact slim lite"
+  "searchKwRemoteCompactHistory": "精简 简洁 历史 工具 传输 流量 远程 compact slim lite",
+  "remoteCacheData": "本地保存远程数据",
+  "remoteCacheDataHint": "把这台主机的会话列表、最近消息和图片存在手机上：打开时先显示上次内容，再只同步新增的部分。关闭会删除已存数据；主机的数据始终为准。",
+  "searchKwRemoteCacheData": "缓存 本地 离线 增量 同步 图片 会话列表 流量 cache offline incremental sync"
 }

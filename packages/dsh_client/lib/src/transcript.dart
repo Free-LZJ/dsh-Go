@@ -422,6 +422,21 @@ class ChatTranscript {
     _inbox = {..._inbox, event.target: list};
   }
 
+  /// Seeds the log with a tail read back from a device cache, before the first
+  /// follow: no header or projections, and [hasMoreHistory] stays false until a
+  /// snapshot says otherwise. A snapshot that resumes at this cursor merges
+  /// into it instead of replacing it.
+  void seedTail(Iterable<SessionLogEvent> events) {
+    if (_log.isNotEmpty) return;
+    for (final event in events) {
+      _log[event.seq] = event;
+    }
+    if (_log.isEmpty) return;
+    cursor = _log.lastKey()!;
+    _recomputeTitle();
+    _logChanged();
+  }
+
   /// Merges an older page from `DshClient.history(beforeSeq: oldestSeq)`.
   void prependHistory(HistoryPage page) {
     for (final e in page.events) {

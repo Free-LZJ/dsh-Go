@@ -12,8 +12,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../l10n/l10n.dart';
+import '../remote/cache/remote_data_cache.dart';
 import 'attachment_files_ohos.dart';
 import 'connection_state.dart';
+import 'hosts_state.dart';
 
 /// Something picked in the composer and not sent yet.
 ///
@@ -397,14 +399,25 @@ void _evictSessionThumbnails(Uint8List bytes) {
 final sessionImageProvider = FutureProvider.autoDispose.family<Uint8List, (String, ImageAttachment)>((ref, key) async {
   final (sessionId, attachment) = key;
   final client = ref.watch(activeConnectionProvider.select((c) => c.value?.client));
-  if (client == null) throw StateError(appL10n.commonNotConnected);
   // Scrolling a bubble out and back shouldn't refetch; let it go a bit later.
   final link = ref.keepAlive();
   Timer? release;
   ref.onCancel(() => release = Timer(const Duration(seconds: 30), link.close));
   ref.onResume(() => release?.cancel());
   ref.onDispose(() => release?.cancel());
-  final bytes = (await client.attachment(sessionId, attachment)).bytes;
+  // A picture already on this phone opens without a round trip.
+  final cache = ref.read(remoteDataCacheProvider);
+  final hostKey = RemoteDataCache.hostKey(ref.read(activeHostProvider));
+  final cacheKey = '$sessionId/${attachment.attachmentId}';
+  final cached = await cache.readAttachment(hostKey, cacheKey);
+  final Uint8List bytes;
+  if (cached != null) {
+    bytes = cached;
+  } else {
+    if (client == null) throw StateError(appL10n.commonNotConnected);
+    bytes = (await client.attachment(sessionId, attachment)).bytes;
+    unawaited(cache.writeAttachment(hostKey, cacheKey, bytes));
+  }
   if (ref.mounted) ref.onDispose(() => _evictSessionThumbnails(bytes));
   return bytes;
 });

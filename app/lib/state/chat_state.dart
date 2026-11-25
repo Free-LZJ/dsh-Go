@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../diagnostics/app_error_log.dart';
 import '../l10n/l10n.dart';
+import '../remote/cache/remote_data_cache.dart';
 import '../usage/usage_stats.dart';
 import 'attachments.dart';
 import 'chat_error_text.dart';
@@ -271,6 +272,7 @@ class ChatState {
     this.streamLost = false,
     this.syncing = false,
     this.resyncing = false,
+    this.offline = false,
     this.stopping = false,
     this.title,
     this.approvals = const [],
@@ -305,6 +307,10 @@ class ChatState {
   /// has not yet been applied. This is independent of mux connectivity.
   final bool syncing;
   final bool resyncing;
+
+  /// The Host is away: what is shown is this phone's own copy of the
+  /// conversation, readable but not live.
+  final bool offline;
   bool get controlReady => !syncing && !streamLost;
 
   /// Stop was asked for and the turn has not ended yet.
@@ -384,6 +390,7 @@ class ChatState {
     bool? streamLost,
     bool? syncing,
     bool? resyncing,
+    bool? offline,
     bool? stopping,
     bool? loading,
     bool? loadingOlder,
@@ -405,6 +412,7 @@ class ChatState {
     streamLost: streamLost ?? this.streamLost,
     syncing: syncing ?? this.syncing,
     resyncing: resyncing ?? this.resyncing,
+    offline: offline ?? this.offline,
     stopping: stopping ?? this.stopping,
     title: title,
     approvals: approvals,
@@ -467,6 +475,15 @@ class ChatController extends Notifier<ChatState> {
   String? _usageAttempt;
   void Function(UsageOutcome, {UsageOperation? actual})? _usageTurnEnd;
   void Function(UsageOutcome, {UsageOperation? actual})? _usageFirstText;
+
+  /// The phone's copy of this conversation ([RemoteDataCache]); `null` while
+  /// no Host is connected, and disabled by the preference it was built with.
+  RemoteDataCache? _cache;
+  String _cacheHostKey = '';
+
+  /// When the tail was last handed to the cache; a write is throttled, not
+  /// scheduled, so nothing is left pending when the screen goes away.
+  DateTime _lastCacheWrite = DateTime.fromMillisecondsSinceEpoch(0);
   StreamSubscription<DshEvent>? _sub;
   StreamSubscription<DshConnectionState>? _states;
   Timer? _flush;
@@ -572,6 +589,8 @@ class ChatController extends Notifier<ChatState> {
     // rebuild may reuse this Notifier for an identically named session there.
     // Reconnecting to the same Host keeps the existing conversation consent.
     final host = ref.watch(activeHostProvider);
+    _cache = ref.read(remoteDataCacheProvider);
+    _cacheHostKey = RemoteDataCache.hostKey(host);
     if (_approvalHost != host) {
       // These requests belong to the previous Host, even if the new Host has
       // the same session id. A new watch replays its own mux's pending requests.
@@ -623,12 +642,20 @@ class ChatController extends Notifier<ChatState> {
       _flush = null;
       _stopTimeout?.cancel();
       _awayTimer?.cancel();
+      // The tail on screen is the newest state this phone has; the next open
+      // resumes from it.
+      _lastCacheWrite = DateTime.fromMillisecondsSinceEpoch(0);
+      unawaited(_writeCache());
       unawaited(_sub?.cancel());
       unawaited(_states?.cancel());
     });
     // Not connected is a screen state (the composer explains it), not an
-    // error. What was loaded stays until a new snapshot replaces it.
-    if (client == null) return _retained(loading: false);
+    // error. What was loaded stays until a new snapshot replaces it; after a
+    // restart that is what this phone kept (issue #101).
+    if (client == null) {
+      unawaited(_seedOfflineTail());
+      return _retained(loading: _transcript.items.isEmpty && !_offlineSeeded, offline: true, title: _offlineTitle);
+    }
     _sameClock = ref.read(activeConnectionProvider).value!.isLocal;
     if (_sameClock) {
       _quiet = false;
@@ -692,9 +719,10 @@ class ChatController extends Notifier<ChatState> {
 
   /// The loaded conversation without its live parts (running, approvals,
   /// questions), across a new or a lost connection.
-  ChatState _retained({required bool loading}) => ChatState(
+  ChatState _retained({required bool loading, bool offline = false, String? title}) => ChatState(
     items: _transcript.items,
-    title: _transcript.title,
+    title: title ?? _transcript.title,
+    offline: offline,
     turns: _transcript.turns,
     todos: _transcript.todos,
     goal: _transcript.goal,
@@ -809,10 +837,58 @@ class ChatController extends Notifier<ChatState> {
     // cards forwarded only by the previous watch and settled while it was away.
     // Retire local cards before replay; consent and in-flight answers stay intact.
     _retireHostRequests();
+    // A cached sequence resumes the follow straight away, so the Host sends
+    // only the gap. Reading it is synchronous: waiting for the disk here would
+    // delay the follow for a copy that is display-only anyway.
+    // A tail seeded from this phone's copy has no live log here, so the
+    // sequence it holds is exactly what the Host should continue from.
+    final resume = _offlineSeeded || _transcript.items.isEmpty ? _cache?.cachedCursor(_cacheHostKey, sessionId) : null;
+    if (resume != null) {
+      unawaited(_seedCachedTail(current));
+      _watch(client, pulse, current, sinceSeq: resume);
+      return;
+    }
+    _watch(client, pulse, current);
+  }
+
+  /// Paints the cached tail as soon as it lands, if the follow has not already
+  /// replaced the log. A snapshot that arrives first simply wins.
+  Future<void> _seedCachedTail(bool Function() current) async {
+    final cache = _cache;
+    if (cache == null) return;
+    final cached = await cache.readTranscript(_cacheHostKey, sessionId);
+    if (!current() || cached == null || cached.events.isEmpty) return;
+    if (_transcript.items.isNotEmpty) return;
+    _transcript.seedTail(cached.events);
+    _publish();
+  }
+
+  /// This screen already painted the phone's own copy of the conversation.
+  bool _offlineSeeded = false;
+  String? _offlineTitle;
+
+  /// A conversation opened while the Host is away shows what this phone kept
+  /// for it (issue #101): the cached tail, read-only, titled as the list last
+  /// knew it. A follow that lands first simply wins.
+  Future<void> _seedOfflineTail() async {
+    if (_offlineSeeded) return;
+    _offlineSeeded = true;
+    final cache = _cache;
+    if (cache == null) return;
+    final cached = await cache.readTranscript(_cacheHostKey, sessionId);
+    final rows = await cache.readSessions(_cacheHostKey);
+    if (!ref.mounted || _client != null) return;
+    if (cached != null) _transcript.seedTail(cached.events);
+    _offlineTitle = rows?.where((row) => row.sessionId == sessionId).map((row) => row.title).nonNulls.firstOrNull;
+    state = _retained(loading: false, offline: true, title: _offlineTitle);
+  }
+
+  void _watch(DshClient client, RunPulse pulse, bool Function() current, {int? sinceSeq}) {
     _sub = client
         .watch(
           sessionId,
           options: WatchOptions(
+            sinceSeq: sinceSeq,
             assistantStream: !_quiet,
             includeSyncEvents: true,
             activate: true,
@@ -939,6 +1015,26 @@ class ChatController extends Notifier<ChatState> {
             state = state.copyWith(streamLost: true, loading: false);
           },
         );
+  }
+
+  /// Writes the tail that is on screen, at most once every few seconds; a
+  /// screen that goes away flushes the last one ([build]'s dispose).
+  ///
+  /// A throttle rather than a debounce: a timer would outlive a screen that is
+  /// closed between two writes, and the only cost of a skipped write here is
+  /// that the next resume starts from a slightly older sequence.
+  void _scheduleCacheWrite() {
+    if (_transcript.cursor < 0 || _cache?.enabled != true) return;
+    final now = DateTime.now();
+    if (now.difference(_lastCacheWrite) < const Duration(seconds: 2)) return;
+    _lastCacheWrite = now;
+    unawaited(_writeCache());
+  }
+
+  Future<void> _writeCache() {
+    final cache = _cache;
+    if (cache == null || _transcript.cursor < 0) return Future.value();
+    return cache.writeTranscript(_cacheHostKey, sessionId, _transcript.events);
   }
 
   Set<String> _inboxIds() => {for (final q in _transcript.inbox) ?q.requestId};
@@ -1239,6 +1335,7 @@ class ChatController extends Notifier<ChatState> {
       goal: _transcript.goal,
       clockSkew: _skew ?? Duration.zero,
     );
+    _scheduleCacheWrite();
   }
 
   /// Our pending prompts with their inbox slot, plus prompts waiting in the

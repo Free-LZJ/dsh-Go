@@ -1670,6 +1670,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                 streamLost: s.streamLost,
                 syncing: s.syncing,
                 resyncing: s.resyncing,
+                offline: s.offline,
+                hasItems: s.items.isNotEmpty,
                 controlReady: s.controlReady,
                 connection: s.connection,
                 approval: s.openApproval,
@@ -2072,7 +2074,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WidgetsBindingObse
                                     duration: AppMotion.of(context, AppMotion.standard),
                                     curve: AppMotion.std,
                                     alignment: Alignment.bottomCenter,
-                                    child: connected && sessionId != null && !(chat?.controlReady ?? true)
+                                    child: !connected && (chat?.offline ?? false) && (chat?.hasItems ?? false)
+                                        ? Padding(
+                                            padding: const EdgeInsets.only(bottom: 8),
+                                            child: ErrorBanner(
+                                              maxLines: null,
+                                              info: true,
+                                              message: l10n.readListOffline,
+                                            ),
+                                          )
+                                        : connected && sessionId != null && !(chat?.controlReady ?? true)
                                         ? Padding(
                                             padding: const EdgeInsets.only(bottom: 8),
                                             child: ErrorBanner(

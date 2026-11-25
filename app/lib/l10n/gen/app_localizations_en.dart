@@ -19593,6 +19593,12 @@ class L10nEn extends L10n {
   String get remoteNetworkIceProtocol => 'ICE protocol';
 
   @override
+  String get remoteTransferSettings => 'Remote transfer';
+
+  @override
+  String get remoteDataSection => 'Stored data';
+
+  @override
   String get remoteCompactHistory => 'Compact history';
 
   @override
@@ -19605,6 +19611,16 @@ class L10nEn extends L10n {
 
   @override
   String get searchKwRemoteCompactHistory => 'compact slim lite history tools transfer bandwidth remote';
+
+  @override
+  String get remoteCacheData => 'Store remote data locally';
+
+  @override
+  String get remoteCacheDataHint =>
+      'Keeps this Host\'s session list, recent messages and images on the phone: screens open with what was there and only the new part syncs. Turning it off deletes the stored copy; the Host stays authoritative.';
+
+  @override
+  String get searchKwRemoteCacheData => 'cache local offline incremental sync images session list bandwidth';
 
   @override
   String get remotePairEntry => 'Pair a computer by scanning';

@@ -34110,6 +34110,18 @@ abstract class L10n {
   /// **'ICE 协议'**
   String get remoteNetworkIceProtocol;
 
+  /// No description provided for @remoteTransferSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'远程传输'**
+  String get remoteTransferSettings;
+
+  /// No description provided for @remoteDataSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地数据'**
+  String get remoteDataSection;
+
   /// No description provided for @remoteCompactHistory.
   ///
   /// In zh, this message translates to:
@@ -34133,6 +34145,24 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'精简 简洁 历史 工具 传输 流量 远程 compact slim lite'**
   String get searchKwRemoteCompactHistory;
+
+  /// No description provided for @remoteCacheData.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地保存远程数据'**
+  String get remoteCacheData;
+
+  /// No description provided for @remoteCacheDataHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'把这台主机的会话列表、最近消息和图片存在手机上：打开时先显示上次内容，再只同步新增的部分。关闭会删除已存数据；主机的数据始终为准。'**
+  String get remoteCacheDataHint;
+
+  /// No description provided for @searchKwRemoteCacheData.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓存 本地 离线 增量 同步 图片 会话列表 流量 cache offline incremental sync'**
+  String get searchKwRemoteCacheData;
 
   /// No description provided for @remotePairEntry.
   ///

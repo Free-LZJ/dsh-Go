@@ -72,6 +72,7 @@ class WatchOptions {
     this.includeConnectionEvents = true,
     this.includeSyncEvents = false,
     this.hostRequestGrace = const Duration(seconds: 3),
+    this.sinceSeq,
   });
 
   /// Request activation on a confirmed compatible Host. Passive readers keep
@@ -112,6 +113,11 @@ class WatchOptions {
 
   /// Reconcile requests not redelivered after a new Host ready generation.
   final Duration hostRequestGrace;
+
+  /// Last event sequence a previous watch already applied (e.g. read back from
+  /// a local cache). The first snapshot then resyncs from this point instead of
+  /// replacing the whole log, and only the gap is filled.
+  final int? sinceSeq;
 }
 
 class FileReceipt {
@@ -1007,6 +1013,8 @@ class _Resync implements Exception {
 class _SessionWatch {
   _SessionWatch(this.client, this.sessionId, this.options) {
     _controller = StreamController<DshEvent>(onListen: _start, onCancel: _stop);
+    _lastSeq = options.sinceSeq ?? -1;
+    _resuming = options.sinceSeq != null;
   }
 
   final DshClient client;
@@ -1019,6 +1027,9 @@ class _SessionWatch {
   MuxStream? _current;
   bool _stopped = false;
   int _lastSeq = -1;
+
+  /// The first snapshot resumes the seq a cached transcript ends at.
+  bool _resuming = false;
   int? _assistantRevision;
   int _failures = 0;
   int _resyncs = 0;
@@ -1269,11 +1280,26 @@ class _SessionWatch {
     final epoch = _epoch!;
     _assistantRevision = snapshot.assistantRevision;
     var events = snapshot.events;
+    // A resume point read back from a device cache: the log it describes may be
+    // gone or replaced, so its gaps are checked instead of assumed.
+    final resuming = _resuming;
     if (_lastSeq >= 0 && snapshot.cursor > _lastSeq) {
       final firstSeq = events.isEmpty ? snapshot.cursor + 1 : events.first.seq;
       if (firstSeq > _lastSeq + 1) {
         final filled = await _fill(from: _lastSeq + 1, before: firstSeq, through: snapshot.cursor);
         _checkHistoryOwner(epoch);
+        if (resuming && (filled.isEmpty || filled.first.seq != _lastSeq + 1)) {
+          // The Host no longer holds the gap, so the cached tail cannot be
+          // joined to it: start over from this window.
+          if (_stopped || !epoch.isCurrent || !identical(_epochGeneration, client.mux.generation)) {
+            throw const DshCarrierLostException('follow snapshot belongs to a retired generation');
+          }
+          _resuming = false;
+          _lastSeq = snapshot.cursor;
+          _failures = 0;
+          _emit(snapshot.withEvents(events, followEpoch: epoch, isResync: false));
+          return;
+        }
         if (options.includeSyncEvents) {
           var expected = _lastSeq + 1;
           for (final event in filled) {
@@ -1287,9 +1313,12 @@ class _SessionWatch {
     if (_stopped || !epoch.isCurrent || !identical(_epochGeneration, client.mux.generation)) {
       throw const DshCarrierLostException('follow snapshot belongs to a retired generation');
     }
+    // A log replaced under the cached resume point merges into nothing.
+    final replaced = _resuming && snapshot.cursor < _lastSeq;
+    _resuming = false;
     _lastSeq = snapshot.cursor;
     _failures = 0;
-    _emit(snapshot.withEvents(events, followEpoch: epoch));
+    _emit(snapshot.withEvents(events, followEpoch: epoch, isResync: replaced ? false : null));
   }
 
   Future<void> _onFrame(Object? item) async {

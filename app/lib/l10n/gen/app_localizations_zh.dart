@@ -18575,6 +18575,12 @@ class L10nZh extends L10n {
   String get remoteNetworkIceProtocol => 'ICE 协议';
 
   @override
+  String get remoteTransferSettings => '远程传输';
+
+  @override
+  String get remoteDataSection => '本地数据';
+
+  @override
   String get remoteCompactHistory => '精简历史';
 
   @override
@@ -18585,6 +18591,15 @@ class L10nZh extends L10n {
 
   @override
   String get searchKwRemoteCompactHistory => '精简 简洁 历史 工具 传输 流量 远程 compact slim lite';
+
+  @override
+  String get remoteCacheData => '本地保存远程数据';
+
+  @override
+  String get remoteCacheDataHint => '把这台主机的会话列表、最近消息和图片存在手机上：打开时先显示上次内容，再只同步新增的部分。关闭会删除已存数据；主机的数据始终为准。';
+
+  @override
+  String get searchKwRemoteCacheData => '缓存 本地 离线 增量 同步 图片 会话列表 流量 cache offline incremental sync';
 
   @override
   String get remotePairEntry => '扫码配对电脑';

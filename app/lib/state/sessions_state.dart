@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../companion/companion_state.dart';
 import '../runtime/runtime_state.dart';
+import '../remote/cache/remote_data_cache.dart';
 import 'connection_state.dart';
 import 'hosts_state.dart';
 import '../runtime/local_paths.dart';
@@ -282,6 +283,9 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
     final List<SessionSummary> sessions;
     _listsOut++;
     try {
+      // The phone's last list shows while the Host is asked, so a remote first
+      // frame is not blank; the live read replaces it below.
+      unawaited(_publishCached(r, seq));
       sessions = await client.listSessions();
     } finally {
       _listsOut--;
@@ -295,8 +299,33 @@ class SessionsController extends AsyncNotifier<List<SessionSummary>> {
       cache.stamp(sessions, identity, client);
       _origin = cache.origin(sessions);
       _readTitles(r, client);
+      final host = _host;
+      final listed = _visible();
+      if (host != null) {
+        // What the drawer lists is what a cold start shows offline: archived,
+        // subagent, pending-delete and companion rows stay out (issue #101).
+        unawaited(r.read(remoteDataCacheProvider).writeSessions(RemoteDataCache.hostKey(host), listed));
+      }
+      return listed;
     }
     return _visible();
+  }
+
+  /// Publishes this Host's list from the phone's cache, if any, without
+  /// touching the network. A refresh keeps the live list it already shows.
+  Future<void> _publishCached(Ref r, int seq) async {
+    final host = _host;
+    if (host == null) return;
+    try {
+      final cached = await r.read(remoteDataCacheProvider).readSessions(RemoteDataCache.hostKey(host));
+      if (cached == null || cached.isEmpty) return;
+      // The live list may have landed while this disk read was in flight.
+      if (!r.mounted || seq != _loadSeq || (state.hasValue && !state.isLoading)) return;
+      _all = cached.where((s) => !_deleted.contains(s.sessionId)).toList();
+      state = AsyncData(_visible());
+    } on Object {
+      // A cache the phone cannot read only costs the warm first frame.
+    }
   }
 
   /// Lists being read. An edge landing meanwhile reads the list once more
